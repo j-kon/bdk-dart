@@ -61,7 +61,9 @@ class TransactionsController extends Notifier<TransactionsState> {
   TransactionsController(this.walletId);
 
   final String? walletId;
-  bool _isLoading = false;
+  Future<void>? _inFlightLoad;
+  bool _hasPendingRefresh = false;
+  bool _pendingIsBackground = true;
 
   @override
   TransactionsState build() {
@@ -97,11 +99,29 @@ class TransactionsController extends Notifier<TransactionsState> {
       return;
     }
 
-    if (_isLoading) {
-      return;
+    if (_inFlightLoad != null) {
+      _hasPendingRefresh = true;
+      if (!isBackgroundRefresh) {
+        _pendingIsBackground = false;
+      }
+      return _inFlightLoad;
     }
-    _isLoading = true;
 
+    _inFlightLoad = _performLoad(isBackgroundRefresh: isBackgroundRefresh);
+    try {
+      await _inFlightLoad;
+    } finally {
+      _inFlightLoad = null;
+      if (ref.mounted && _hasPendingRefresh) {
+        final isBg = _pendingIsBackground;
+        _hasPendingRefresh = false;
+        _pendingIsBackground = true;
+        await loadTransactions(isBackgroundRefresh: isBg);
+      }
+    }
+  }
+
+  Future<void> _performLoad({required bool isBackgroundRefresh}) async {
     if (!isBackgroundRefresh) {
       state = state.copyWith(
         status: TransactionsLoadState.loading,
@@ -140,17 +160,14 @@ class TransactionsController extends Notifier<TransactionsState> {
           transactions: state.transactions,
           errorMessage: _readableError(error),
         );
-        return;
+      } else {
+        state = state.copyWith(
+          status: TransactionsLoadState.error,
+          transactions: const [],
+          statusMessage: 'Transaction history could not be loaded.',
+          errorMessage: _readableError(error),
+        );
       }
-
-      state = state.copyWith(
-        status: TransactionsLoadState.error,
-        transactions: const [],
-        statusMessage: 'Transaction history could not be loaded.',
-        errorMessage: _readableError(error),
-      );
-    } finally {
-      _isLoading = false;
     }
   }
 

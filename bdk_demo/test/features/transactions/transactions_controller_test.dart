@@ -198,7 +198,7 @@ void main() {
     });
 
     test(
-      'duplicate concurrent load calls do not execute duplicate repository requests',
+      'a refresh requested while another transaction load is running is queued rather than discarded',
       () async {
         final repo = CountingTransactionsRepository(transactions: []);
 
@@ -212,10 +212,10 @@ void main() {
         );
 
         final load1 = notifier.loadTransactions();
-        final load2 = notifier.loadTransactions();
+        final load2 = notifier.loadTransactions(isBackgroundRefresh: true);
 
         await Future.wait([load1, load2]);
-        expect(repo.loadCount, 1);
+        expect(repo.loadCount, 2);
       },
     );
 
@@ -325,6 +325,7 @@ void main() {
         ]);
 
         container.read(activeWalletRecordProvider.notifier).set(recordA);
+        container.read(activeWalletProvider.notifier).set(wallet1);
         final walletAId = container.read(activeWalletIdProvider);
         keepControllerAlive(container, walletAId);
 
@@ -333,12 +334,10 @@ void main() {
             .loadTransactions();
         final initialLoadCount = repo.loadCount;
 
-        container.read(activeWalletProvider.notifier).set(wallet1);
-        await container
-            .read(transactionsControllerProvider(walletAId).notifier)
-            .loadTransactions(isBackgroundRefresh: true);
+        container.read(activeWalletProvider.notifier).set(wallet2);
+        await container.pump();
 
-        expect(repo.loadCount, greaterThan(initialLoadCount));
+        expect(repo.loadCount, equals(initialLoadCount + 1));
       },
     );
 
