@@ -48,12 +48,25 @@ final transactionsControllerProvider = NotifierProvider.autoDispose
       TransactionsController.new,
     );
 
+final hasActiveTransactionWalletProvider = Provider<bool>((ref) {
+  final walletId = ref.watch(activeWalletIdProvider);
+  final binding = ref.watch(activeWalletBindingProvider);
+  final repository = ref.watch(transactionsRepositoryProvider);
+  return binding?.walletId == walletId &&
+      repository.isAvailableForWallet(walletId);
+});
+
 final transactionDetailsProvider = FutureProvider.autoDispose
     .family<TransactionHistoryItem?, ({String? walletId, String txid})>((
       ref,
       arg,
     ) {
+      final binding = ref.watch(activeWalletBindingProvider);
       final repository = ref.watch(transactionsRepositoryProvider);
+      if (binding?.walletId != arg.walletId ||
+          !repository.isAvailableForWallet(arg.walletId)) {
+        return Future.value(null);
+      }
       return repository.loadTransactionByTxid(arg.txid);
     });
 
@@ -67,21 +80,20 @@ class TransactionsController extends Notifier<TransactionsState> {
 
   @override
   TransactionsState build() {
-    if (walletId == null) {
-      return const TransactionsState(
-        status: TransactionsLoadState.noWallet,
-        transactions: [],
-        statusMessage:
-            'Create or load a wallet before viewing transaction history.',
-      );
-    }
-
-    ref.listen(activeWalletProvider, (previous, next) {
-      if (next != null) {
-        final isSuccess = state.status == TransactionsLoadState.success;
-        loadTransactions(isBackgroundRefresh: isSuccess);
+    ref.listen(activeWalletBindingProvider, (previous, next) {
+      if (next?.walletId != walletId) {
+        state = _noWalletState;
+        return;
       }
+
+      final isSuccess = state.status == TransactionsLoadState.success;
+      loadTransactions(isBackgroundRefresh: isSuccess);
     });
+
+    final repository = ref.read(transactionsRepositoryProvider);
+    if (!_isWalletAvailable(repository)) {
+      return _noWalletState;
+    }
 
     Future.microtask(() => loadTransactions());
 
@@ -89,13 +101,8 @@ class TransactionsController extends Notifier<TransactionsState> {
   }
 
   Future<void> loadTransactions({bool isBackgroundRefresh = false}) async {
-    if (walletId == null) {
-      state = const TransactionsState(
-        status: TransactionsLoadState.noWallet,
-        transactions: [],
-        statusMessage:
-            'Create or load a wallet before viewing transaction history.',
-      );
+    if (!_isWalletAvailable(ref.read(transactionsRepositoryProvider))) {
+      state = _noWalletState;
       return;
     }
 
@@ -132,11 +139,18 @@ class TransactionsController extends Notifier<TransactionsState> {
     }
 
     try {
-      final transactions = await ref
-          .read(transactionsRepositoryProvider)
-          .loadTransactions();
+      final repository = ref.read(transactionsRepositoryProvider);
+      if (!_isWalletAvailable(repository)) {
+        state = _noWalletState;
+        return;
+      }
+      final transactions = await repository.loadTransactions();
 
       if (!ref.mounted) {
+        return;
+      }
+      if (!_isWalletAvailable(ref.read(transactionsRepositoryProvider))) {
+        state = _noWalletState;
         return;
       }
 
@@ -150,6 +164,10 @@ class TransactionsController extends Notifier<TransactionsState> {
       );
     } catch (error) {
       if (!ref.mounted) {
+        return;
+      }
+      if (!_isWalletAvailable(ref.read(transactionsRepositoryProvider))) {
+        state = _noWalletState;
         return;
       }
 
@@ -173,4 +191,17 @@ class TransactionsController extends Notifier<TransactionsState> {
 
   String _readableError(Object error) =>
       error.toString().replaceFirst('Exception: ', '');
+
+  bool _isWalletAvailable(TransactionsRepository repository) {
+    final binding = ref.read(activeWalletBindingProvider);
+    return binding?.walletId == walletId &&
+        repository.isAvailableForWallet(walletId);
+  }
+
+  TransactionsState get _noWalletState => const TransactionsState(
+    status: TransactionsLoadState.noWallet,
+    transactions: [],
+    statusMessage:
+        'Create or load a wallet before viewing transaction history.',
+  );
 }

@@ -15,9 +15,7 @@ class ConfirmedTransactionPosition extends TransactionHistoryPosition {
 }
 
 class UnconfirmedTransactionPosition extends TransactionHistoryPosition {
-  final int? timestamp;
-
-  const UnconfirmedTransactionPosition({this.timestamp});
+  const UnconfirmedTransactionPosition();
 }
 
 class TransactionHistoryMapper {

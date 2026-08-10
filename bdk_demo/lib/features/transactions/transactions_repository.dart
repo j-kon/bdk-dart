@@ -5,14 +5,16 @@ import 'package:bdk_demo/providers/wallet_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 abstract interface class TransactionsRepository {
+  bool isAvailableForWallet(String? walletId);
   Future<List<TransactionHistoryItem>> loadTransactions();
   Future<TransactionHistoryItem?> loadTransactionByTxid(String txid);
 }
 
 final transactionsRepositoryProvider = Provider<TransactionsRepository>((ref) {
-  final wallet = ref.watch(activeWalletProvider);
+  final binding = ref.watch(activeWalletBindingProvider);
   return WalletTransactionsRepository(
-    source: wallet == null ? null : BdkWalletTransactionSource(wallet),
+    walletId: binding?.walletId,
+    source: binding == null ? null : BdkWalletTransactionSource(binding.wallet),
   );
 });
 
@@ -37,10 +39,18 @@ class TransactionHistoryRecord {
 }
 
 class WalletTransactionsRepository implements TransactionsRepository {
-  WalletTransactionsRepository({required TransactionHistorySource? source})
-    : _source = source;
+  WalletTransactionsRepository({
+    required String? walletId,
+    required TransactionHistorySource? source,
+  }) : _walletId = walletId,
+       _source = source;
 
+  final String? _walletId;
   final TransactionHistorySource? _source;
+
+  @override
+  bool isAvailableForWallet(String? walletId) =>
+      walletId != null && walletId == _walletId && _source != null;
 
   @override
   Future<List<TransactionHistoryItem>> loadTransactions() async {
@@ -141,9 +151,7 @@ class BdkWalletTransactionSource implements TransactionHistorySource {
           confirmationTime: position.confirmationBlockTime.confirmationTime,
         );
       } else if (position is bdk.UnconfirmedChainPosition) {
-        mappedPosition = UnconfirmedTransactionPosition(
-          timestamp: position.timestamp,
-        );
+        mappedPosition = const UnconfirmedTransactionPosition();
       } else {
         throw StateError('Unsupported transaction chain position: $position');
       }

@@ -36,7 +36,7 @@ void main() {
             'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
         sent: 1600,
         received: 0,
-        position: const UnconfirmedTransactionPosition(timestamp: 1704164640),
+        position: const UnconfirmedTransactionPosition(),
       );
 
       expect(item.sent, 1600);

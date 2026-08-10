@@ -343,7 +343,9 @@ class SyncController extends Notifier<int> {
       }
 
       final syncedWallet = reloadedWallet;
-      ref.read(activeWalletProvider.notifier).replaceWallet(syncedWallet);
+      ref
+          .read(activeWalletProvider.notifier)
+          .replaceWallet(syncedWallet, walletId: walletId);
       transferredWallet = true;
       ref
           .read(balanceSnapshotProvider.notifier)

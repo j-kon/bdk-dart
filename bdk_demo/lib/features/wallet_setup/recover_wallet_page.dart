@@ -173,7 +173,7 @@ class _RecoverWalletPageState extends ConsumerState<RecoverWalletPage>
   }
 
   void _activateRecoveredWallet(WalletRecord record, Wallet wallet) {
-    ref.read(activeWalletProvider.notifier).set(wallet);
+    ref.read(activeWalletProvider.notifier).set(wallet, walletId: record.id);
     ref.read(activeWalletRecordProvider.notifier).set(record);
     ref.read(walletRecordsProvider.notifier).refresh();
   }

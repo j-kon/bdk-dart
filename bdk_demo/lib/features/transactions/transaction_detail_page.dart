@@ -30,6 +30,21 @@ class TransactionDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final activeWalletId = ref.watch(activeWalletIdProvider);
+    final hasActiveWallet = ref.watch(hasActiveTransactionWalletProvider);
+    if (!hasActiveWallet) {
+      return const Scaffold(
+        appBar: SecondaryAppBar(title: 'Transaction Detail'),
+        body: SafeArea(
+          child: WalletStateCard(
+            icon: Icons.account_balance_wallet_outlined,
+            title: 'No active wallet',
+            message:
+                'Create or load a wallet before viewing transaction details.',
+            centered: true,
+          ),
+        ),
+      );
+    }
     final transactionAsync = ref.watch(
       transactionDetailsProvider((walletId: activeWalletId, txid: txid)),
     );

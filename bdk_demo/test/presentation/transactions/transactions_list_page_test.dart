@@ -25,6 +25,9 @@ class DelayedTransactionsRepository implements TransactionsRepository {
   DelayedTransactionsRepository(this.delayedResult);
 
   @override
+  bool isAvailableForWallet(String? walletId) => walletId != null;
+
+  @override
   Future<List<TransactionHistoryItem>> loadTransactions() async {
     return delayedResult;
   }
@@ -43,6 +46,9 @@ class MutableTransactionsRepository implements TransactionsRepository {
   List<TransactionHistoryItem> transactions;
 
   MutableTransactionsRepository(this.transactions);
+
+  @override
+  bool isAvailableForWallet(String? walletId) => walletId != null;
 
   @override
   Future<List<TransactionHistoryItem>> loadTransactions() async {
@@ -102,6 +108,14 @@ Future<void> _pumpTransactionsFlow(
           activeWalletIdProvider.overrideWithValue(
             hasActiveWallet ? 'wallet-a' : null,
           ),
+          activeWalletBindingProvider.overrideWithValue(
+            hasActiveWallet
+                ? ActiveWalletBinding(
+                    walletId: 'wallet-a',
+                    wallet: FakeWallet(),
+                  )
+                : null,
+          ),
         ],
         child: MaterialApp.router(routerConfig: router),
       ),
@@ -160,6 +174,9 @@ void main() {
               FakeTransactionsRepository(transactions: transactionHistoryItems),
             ),
             activeWalletIdProvider.overrideWithValue('wallet-a'),
+            activeWalletBindingProvider.overrideWithValue(
+              ActiveWalletBinding(walletId: 'wallet-a', wallet: FakeWallet()),
+            ),
           ],
           child: MaterialApp.router(routerConfig: router),
         ),
@@ -238,11 +255,52 @@ void main() {
         findsOneWidget,
       );
 
-      final buttonFinder = find.widgetWithText(
-        FilledButton,
-        'Load Transaction History',
+      final buttonFinder = find.ancestor(
+        of: find.text('Load Transaction History'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ButtonStyleButton,
+        ),
       );
-      expect(tester.widget<FilledButton>(buttonFinder).onPressed, isNull);
+      expect(tester.widget<ButtonStyleButton>(buttonFinder).onPressed, isNull);
+    },
+  );
+
+  testWidgets(
+    'wallet record without an FFI wallet shows no-wallet state and disables loading',
+    (tester) async {
+      final container = ProviderContainer(
+        overrides: [
+          transactionsRepositoryProvider.overrideWithValue(
+            FakeTransactionsRepository(transactions: const []),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+          .read(activeWalletRecordProvider.notifier)
+          .set(
+            const WalletRecord(
+              id: 'wallet-a',
+              name: 'Wallet A',
+              network: WalletNetwork.testnet,
+              scriptType: ScriptType.p2wpkh,
+            ),
+          );
+
+      await _pumpTransactionsFlow(
+        tester,
+        repository: FakeTransactionsRepository(transactions: const []),
+        container: container,
+      );
+
+      expect(find.text('No active wallet'), findsOneWidget);
+      final buttonFinder = find.ancestor(
+        of: find.text('Load Transaction History'),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is ButtonStyleButton,
+        ),
+      );
+      expect(tester.widget<ButtonStyleButton>(buttonFinder).onPressed, isNull);
     },
   );
 
@@ -286,20 +344,22 @@ void main() {
           confirmationTime: DateTime.now(),
         ),
       ];
+      final walletBTransactions = Completer<List<TransactionHistoryItem>>();
 
       container = ProviderContainer(
         overrides: [
           transactionsRepositoryProvider.overrideWith((ref) {
             final activeId = ref.watch(activeWalletIdProvider);
-            return FakeTransactionsRepository(
-              transactions: activeId == 'wallet-a' ? txsA : txsB,
-            );
+            return activeId == 'wallet-a'
+                ? FakeTransactionsRepository(transactions: txsA)
+                : DelayedTransactionsRepository(walletBTransactions.future);
           }),
         ],
       );
       addTearDown(container.dispose);
 
       container.read(activeWalletRecordProvider.notifier).set(recordA);
+      container.read(activeWalletProvider.notifier).set(FakeWallet());
 
       await _pumpTransactionsFlow(
         tester,
@@ -313,11 +373,17 @@ void main() {
 
       // Switch logical active wallet ID from A to B
       container.read(activeWalletRecordProvider.notifier).set(recordB);
-      await tester.pumpAndSettle();
+      container.read(activeWalletProvider.notifier).set(FakeWallet());
+      await tester.pump();
 
-      // Verify A's rows are gone, and B's rows loaded automatically without build-time exceptions
+      // Wallet A must disappear before wallet B's delayed load completes.
       expect(find.text('+10000 sat'), findsNothing);
       expect(find.textContaining('tx-a'), findsNothing);
+
+      walletBTransactions.complete(txsB);
+      await tester.pumpAndSettle();
+
+      // Verify B's rows load automatically without build-time exceptions.
       expect(find.text('+20000 sat'), findsOneWidget);
       expect(find.textContaining('tx-b'), findsOneWidget);
     },
@@ -424,6 +490,7 @@ void main() {
       addTearDown(container.dispose);
 
       container.read(activeWalletRecordProvider.notifier).set(recordA);
+      container.read(activeWalletProvider.notifier).set(FakeWallet());
 
       await _pumpTransactionsFlow(
         tester,
@@ -437,6 +504,7 @@ void main() {
 
       // Switch active wallet to B
       container.read(activeWalletRecordProvider.notifier).set(recordB);
+      container.read(activeWalletProvider.notifier).set(FakeWallet());
       await tester.pump();
 
       // Complete A's future

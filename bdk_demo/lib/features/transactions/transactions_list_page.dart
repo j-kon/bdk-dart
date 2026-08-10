@@ -27,10 +27,11 @@ class TransactionsListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final activeWalletId = ref.watch(activeWalletIdProvider);
+    final hasActiveWallet = ref.watch(hasActiveTransactionWalletProvider);
     final controllerProvider = transactionsControllerProvider(activeWalletId);
     final state = ref.watch(controllerProvider);
     final isLoading = state.status == TransactionsLoadState.loading;
-    final canLoad = activeWalletId != null && !isLoading;
+    final canLoad = hasActiveWallet && !isLoading;
 
     return Scaffold(
       appBar: const SecondaryAppBar(title: 'Transaction History'),

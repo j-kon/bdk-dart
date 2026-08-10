@@ -11,6 +11,9 @@ class FakeTransactionsRepository implements TransactionsRepository {
   final bool throwOnLoad;
 
   @override
+  bool isAvailableForWallet(String? walletId) => walletId != null;
+
+  @override
   Future<List<TransactionHistoryItem>> loadTransactions() async {
     if (throwOnLoad) {
       throw Exception('forced transaction load failure');

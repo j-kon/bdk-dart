@@ -1,3 +1,4 @@
+import 'package:bdk_dart/bdk.dart' as bdk;
 import 'package:bdk_demo/features/transactions/models/transaction_history_item.dart';
 import 'package:bdk_demo/features/transactions/transaction_detail_page.dart';
 import 'package:bdk_demo/features/transactions/transactions_repository.dart';
@@ -9,6 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/fakes/fake_transactions_repository.dart';
 import '../../helpers/fixtures/transaction_history_items.dart';
+
+class FakeWallet extends Fake implements bdk.Wallet {
+  @override
+  void dispose() {}
+}
 
 Future<void> _pumpDetailPage(
   WidgetTester tester, {
@@ -34,6 +40,9 @@ Future<void> _pumpDetailPage(
         overrides: [
           transactionsRepositoryProvider.overrideWithValue(repository),
           activeWalletIdProvider.overrideWithValue('wallet-a'),
+          activeWalletBindingProvider.overrideWithValue(
+            ActiveWalletBinding(walletId: 'wallet-a', wallet: FakeWallet()),
+          ),
         ],
         child: MaterialApp(
           home: TransactionDetailPage(
@@ -123,6 +132,39 @@ void main() {
     expect(find.textContaining('missing-txid'), findsOneWidget);
   });
 
+  testWidgets('distinguishes no active wallet from a missing transaction', (
+    tester,
+  ) async {
+    final container = ProviderContainer(
+      overrides: [
+        transactionsRepositoryProvider.overrideWithValue(
+          FakeTransactionsRepository(transactions: const []),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeWalletRecordProvider.notifier)
+        .set(
+          const WalletRecord(
+            id: 'wallet-a',
+            name: 'Wallet A',
+            network: WalletNetwork.testnet,
+            scriptType: ScriptType.p2wpkh,
+          ),
+        );
+
+    await _pumpDetailPage(
+      tester,
+      repository: FakeTransactionsRepository(transactions: const []),
+      txid: 'missing-txid',
+      container: container,
+    );
+
+    expect(find.text('No active wallet'), findsOneWidget);
+    expect(find.text('Transaction not found'), findsNothing);
+  });
+
   testWidgets(
     'transaction detail from wallet A is not reused after switching to wallet B',
     (tester) async {
@@ -178,6 +220,7 @@ void main() {
 
       // Set initial wallet record to Wallet A
       container.read(activeWalletRecordProvider.notifier).set(recordA);
+      container.read(activeWalletProvider.notifier).set(FakeWallet());
 
       // 1. Pump with wallet A active
       await _pumpDetailPage(
@@ -193,6 +236,7 @@ void main() {
 
       // 2. Switch logical active wallet ID to wallet B
       container.read(activeWalletRecordProvider.notifier).set(recordB);
+      container.read(activeWalletProvider.notifier).set(FakeWallet());
       await tester.pump(); // Start rebuild
 
       // Verify it doesn't immediately reuse wallet A's detail
