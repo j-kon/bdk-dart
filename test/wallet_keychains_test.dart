@@ -9,8 +9,7 @@ void main() {
       final descriptor = buildBip84Descriptor(Network.testnet);
       final changeDescriptor = buildBip84ChangeDescriptor(Network.testnet);
       final persister = Persister.newInMemory();
-      late Wallet wallet;
-      var walletInitialized = false;
+      Wallet? wallet;
 
       try {
         wallet = Wallet(
@@ -20,7 +19,6 @@ void main() {
           persister: persister,
           lookahead: defaultLookahead,
         );
-        walletInitialized = true;
 
         final keychains = wallet.keychains();
 
@@ -39,9 +37,7 @@ void main() {
           }
         }
       } finally {
-        if (walletInitialized) {
-          wallet.dispose();
-        }
+        wallet?.dispose();
         persister.dispose();
         descriptor.dispose();
         changeDescriptor.dispose();
