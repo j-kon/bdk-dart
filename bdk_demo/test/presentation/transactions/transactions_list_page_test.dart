@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:bdk_dart/bdk.dart' as bdk;
 import 'package:bdk_demo/features/transactions/models/transaction_history_item.dart';
 import 'package:bdk_demo/features/transactions/transaction_detail_page.dart';
+import 'package:bdk_demo/features/transactions/transactions_controller.dart';
 import 'package:bdk_demo/features/transactions/transactions_list_page.dart';
 import 'package:bdk_demo/features/transactions/transactions_repository.dart';
 import 'package:bdk_demo/models/wallet_record.dart';
@@ -44,6 +45,7 @@ class DelayedTransactionsRepository implements TransactionsRepository {
 
 class MutableTransactionsRepository implements TransactionsRepository {
   List<TransactionHistoryItem> transactions;
+  Object? error;
 
   MutableTransactionsRepository(this.transactions);
 
@@ -52,6 +54,8 @@ class MutableTransactionsRepository implements TransactionsRepository {
 
   @override
   Future<List<TransactionHistoryItem>> loadTransactions() async {
+    final currentError = error;
+    if (currentError != null) throw currentError;
     return transactions;
   }
 
@@ -145,6 +149,9 @@ void main() {
     expect(find.text('abcdef...7890'), findsOneWidget);
     expect(find.text('confirmed'), findsOneWidget);
     expect(find.text('pending'), findsOneWidget);
+    expect(find.text('Transaction History'), findsOneWidget);
+    expect(find.text('Load Transaction History'), findsNothing);
+    expect(find.text('Reload Transaction History'), findsNothing);
   });
 
   testWidgets(
@@ -239,7 +246,7 @@ void main() {
   });
 
   testWidgets(
-    'no active wallet shows the no-wallet state and disables load button',
+    'no active wallet shows the no-wallet state without a load button',
     (tester) async {
       await _pumpTransactionsFlow(
         tester,
@@ -255,18 +262,13 @@ void main() {
         findsOneWidget,
       );
 
-      final buttonFinder = find.ancestor(
-        of: find.text('Load Transaction History'),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is ButtonStyleButton,
-        ),
-      );
-      expect(tester.widget<ButtonStyleButton>(buttonFinder).onPressed, isNull);
+      expect(find.text('Load Transaction History'), findsNothing);
+      expect(find.text('Reload Transaction History'), findsNothing);
     },
   );
 
   testWidgets(
-    'wallet record without an FFI wallet shows no-wallet state and disables loading',
+    'wallet record without an FFI wallet shows no-wallet state without a load button',
     (tester) async {
       final container = ProviderContainer(
         overrides: [
@@ -294,15 +296,42 @@ void main() {
       );
 
       expect(find.text('No active wallet'), findsOneWidget);
-      final buttonFinder = find.ancestor(
-        of: find.text('Load Transaction History'),
-        matching: find.byWidgetPredicate(
-          (widget) => widget is ButtonStyleButton,
-        ),
-      );
-      expect(tester.widget<ButtonStyleButton>(buttonFinder).onPressed, isNull);
+      expect(find.text('Load Transaction History'), findsNothing);
+      expect(find.text('Reload Transaction History'), findsNothing);
     },
   );
+
+  testWidgets('shows a warning when a background refresh fails', (
+    tester,
+  ) async {
+    final repo = MutableTransactionsRepository(transactionHistoryItems);
+    final container = ProviderContainer(
+      overrides: [transactionsRepositoryProvider.overrideWithValue(repo)],
+    );
+    addTearDown(container.dispose);
+    container
+        .read(activeWalletRecordProvider.notifier)
+        .set(
+          const WalletRecord(
+            id: 'wallet-a',
+            name: 'Wallet A',
+            network: WalletNetwork.testnet,
+            scriptType: ScriptType.p2wpkh,
+          ),
+        );
+    container.read(activeWalletProvider.notifier).set(FakeWallet());
+
+    await _pumpTransactionsFlow(tester, repository: repo, container: container);
+    repo.error = Exception('Refresh failed');
+    await container
+        .read(transactionsControllerProvider('wallet-a').notifier)
+        .loadTransactions(isBackgroundRefresh: true);
+    await tester.pump();
+
+    expect(find.text('Transaction history may be out of date'), findsOneWidget);
+    expect(find.text('Refresh failed'), findsOneWidget);
+    expect(find.text('+42000 sat'), findsOneWidget);
+  });
 
   testWidgets(
     'switching logical active wallet ID from A to B clears A\'s transaction list and loads B\'s automatically',

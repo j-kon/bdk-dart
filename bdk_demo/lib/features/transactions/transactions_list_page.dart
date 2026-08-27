@@ -25,13 +25,9 @@ class TransactionsListPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
     final activeWalletId = ref.watch(activeWalletIdProvider);
-    final hasActiveWallet = ref.watch(hasActiveTransactionWalletProvider);
     final controllerProvider = transactionsControllerProvider(activeWalletId);
     final state = ref.watch(controllerProvider);
-    final isLoading = state.status == TransactionsLoadState.loading;
-    final canLoad = hasActiveWallet && !isLoading;
 
     return Scaffold(
       appBar: const SecondaryAppBar(title: 'Transaction History'),
@@ -39,67 +35,6 @@ class TransactionsListPage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        color: theme.colorScheme.primaryContainer,
-                      ),
-                      child: Icon(
-                        Icons.receipt_long_outlined,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Transaction History',
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'View transactions from the currently loaded wallet. Sync the wallet to refresh balance and history.',
-                      style: theme.textTheme.bodyMedium?.copyWith(
-                        color: theme.colorScheme.onSurface.withAlpha(180),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    FilledButton.icon(
-                      onPressed: canLoad
-                          ? () => ref
-                                .read(controllerProvider.notifier)
-                                .loadTransactions()
-                          : null,
-                      icon: isLoading
-                          ? SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: theme.colorScheme.onPrimary,
-                              ),
-                            )
-                          : const Icon(Icons.download_rounded),
-                      label: Text(
-                        state.status == TransactionsLoadState.success ||
-                                state.status == TransactionsLoadState.error
-                            ? 'Reload Transaction History'
-                            : 'Load Transaction History',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
             const _SectionHeading(
               title: 'Transactions',
               subtitle: 'Active wallet transaction list and detail navigation',
@@ -147,36 +82,49 @@ class _TransactionsBody extends StatelessWidget {
         message: state.errorMessage ?? state.statusMessage,
         accentColor: theme.colorScheme.error,
       ),
-      TransactionsLoadState.success =>
-        state.transactions.isEmpty
-            ? const WalletStateCard(
-                icon: Icons.history_toggle_off,
-                title: 'No transactions yet',
-                message:
-                    'The active wallet has no transactions yet. Sync the wallet or receive funds to populate history.',
-              )
-            : Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      for (
-                        var index = 0;
-                        index < state.transactions.length;
-                        index++
-                      ) ...[
-                        _TransactionRow(
-                          transaction: state.transactions[index],
-                          onTap: () =>
-                              onTap(context, state.transactions[index]),
-                        ),
-                        if (index < state.transactions.length - 1)
-                          const SizedBox(height: 12),
-                      ],
+      TransactionsLoadState.success => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (state.errorMessage != null) ...[
+            WalletStateCard(
+              icon: Icons.sync_problem_outlined,
+              title: 'Transaction history may be out of date',
+              message: state.errorMessage!,
+              accentColor: theme.colorScheme.error,
+            ),
+            const SizedBox(height: 12),
+          ],
+          if (state.transactions.isEmpty)
+            const WalletStateCard(
+              icon: Icons.history_toggle_off,
+              title: 'No transactions yet',
+              message:
+                  'The active wallet has no transactions yet. Sync the wallet or receive funds to populate history.',
+            )
+          else
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    for (
+                      var index = 0;
+                      index < state.transactions.length;
+                      index++
+                    ) ...[
+                      _TransactionRow(
+                        transaction: state.transactions[index],
+                        onTap: () => onTap(context, state.transactions[index]),
+                      ),
+                      if (index < state.transactions.length - 1)
+                        const SizedBox(height: 12),
                     ],
-                  ),
+                  ],
                 ),
               ),
+            ),
+        ],
+      ),
     };
   }
 }
