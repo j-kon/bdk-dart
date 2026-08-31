@@ -100,13 +100,6 @@ class TransactionDetailPage extends ConsumerWidget {
                             WalletStatusChip(status: transaction.statusLabel),
                           ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Transaction detail for the selected wallet transaction.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurface.withAlpha(170),
-                          ),
-                        ),
                       ],
                     ),
                   ),
