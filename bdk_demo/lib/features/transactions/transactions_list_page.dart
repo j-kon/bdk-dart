@@ -35,11 +35,6 @@ class TransactionsListPage extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(24),
           children: [
-            const _SectionHeading(
-              title: 'Transactions',
-              subtitle: 'Active wallet transaction list and detail navigation',
-            ),
-            const SizedBox(height: 12),
             _TransactionsBody(state: state, onTap: _openTransactionDetail),
           ],
         ),
@@ -126,37 +121,6 @@ class _TransactionsBody extends StatelessWidget {
         ],
       ),
     };
-  }
-}
-
-class _SectionHeading extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  const _SectionHeading({required this.title, required this.subtitle});
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          title,
-          style: theme.textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          subtitle,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: theme.colorScheme.onSurface.withAlpha(170),
-          ),
-        ),
-      ],
-    );
   }
 }
 
